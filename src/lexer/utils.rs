@@ -1,10 +1,11 @@
 use std::{fs::File, io::{self, BufRead}, path::Path};
 
-pub fn read_file(filename: &str) -> Vec<String> {
+pub fn read_file(filename: &str) -> Vec<char> {
     let mut result = vec![];
     if let Ok(lines) = read_lines(filename) {
         for line in lines.flatten() {
-            result.push(line);
+            result.extend(line.chars());
+            result.push('\n');
         }
     }
     result
