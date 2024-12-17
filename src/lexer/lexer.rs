@@ -1,4 +1,4 @@
-use std::{array::IntoIter, borrow::Borrow, collections::HashMap, iter::Peekable};
+use std::{borrow::Borrow, collections::HashMap, iter::Peekable};
 
 use crate::lexer::utils::read_file;
 
@@ -63,7 +63,8 @@ impl Lexer {
                     tokens.push(token);
                 }
                 Ok(None) => {
-                    continue // this is good behaviour I guess
+                    continue;
+                    // this is good behaviour I guess (just and only if it is well implemented)
                 }
                 Err(err) => {
                     errors.push(err);
@@ -95,7 +96,8 @@ impl Lexer {
         I: Iterator<Item = char>
     {
         
-        if let Some(char) = contents.next() {
+        if let Some(char) = self.contents_next(contents) {
+
             match char {
                 // Handle single-character static_tokenkinds
                 '(' => Ok(Some(Token::static_tokenkind(
@@ -162,17 +164,14 @@ impl Lexer {
                 // Handle potencial multi-line comment `/* */`
                 '/' => {
                     if contents.peek() == Some(&'*') {
-                        contents.next(); // Consume `*`
-                        self.position.1 += 1;
+                        self.contents_next(contents); // Consume `*`
 
                         while let Some(&c) = contents.peek() {
                             if c == '*' {
-                                contents.next();
-                                self.position.1 += 1;
+                                self.contents_next(contents);
 
                                 if contents.peek() == Some(&'/') {
-                                    contents.next();
-                                    self.position.1 += 1;
+                                    self.contents_next(contents);
                                     break;
                                 }
                             } else if c == '\n' {
@@ -195,7 +194,7 @@ impl Lexer {
                 // Handle potential multi-character tokens (e.g., `==`, `!=`)
                 '!' => {
                     if contents.peek() == Some(&'=') {
-                        contents.next(); // Consume `=`
+                        self.contents_next(contents); // Consume `=`
                         Ok(Some(Token::static_tokenkind(
                             self.source_file.to_string(),
                             TokenKind::BangEqual,
@@ -213,7 +212,7 @@ impl Lexer {
                 }
                 '=' => {
                     if contents.peek() == Some(&'=') {
-                        contents.next(); // Consume `=`
+                        self.contents_next(contents); // Consume `=`
                         Ok(Some(Token::static_tokenkind(
                             self.source_file.to_string(),
                             TokenKind::EqualEqual,
@@ -229,9 +228,57 @@ impl Lexer {
                         )))
                     }
                 }
+
+                '>' => {
+                    if contents.peek() == Some(&'=') {
+                        self.contents_next(contents); // consume `=`
+                        Ok(Some(Token::static_tokenkind(
+                            self.source_file.to_string(),
+                            TokenKind::GreaterEqual,
+                            self.position.0,
+                            self.position.1
+                        )))
+                    } else {
+                        Ok(Some(Token::static_tokenkind(
+                            self.source_file.to_string(),
+                            TokenKind::Greater,
+                            self.position.0,
+                            self.position.1,
+                        )))
+                    }
+                },
+
+                '<' => {
+                    if contents.peek() == Some(&'=') {
+                        self.contents_next(contents); // consume `=`
+                        Ok(Some(Token::static_tokenkind(
+                            self.source_file.to_string(),
+                            TokenKind::LessEqual,
+                            self.position.0,
+                            self.position.1
+                        )))
+                    } else {
+                        Ok(Some(Token::static_tokenkind(
+                            self.source_file.to_string(),
+                            TokenKind::Less,
+                            self.position.0,
+                            self.position.1,
+                        )))
+                    }
+                }
     
                 // Handle whitespace (advance position and ignore)
-                ' ' | '\t' | '\r' => Ok(None),
+                ' ' => {
+                    self.current_position.1 += 1;
+                    Ok(None)
+                }
+                
+                '\t' => {
+                    self.current_position.1 += 4; // tab = 4
+                    Ok(None)
+                }
+
+                '\r' => Ok(None),
     
                 // Handle newlines (update line and reset column)
                 '\n' => {
@@ -248,7 +295,7 @@ impl Lexer {
                     while let Some(&next_char) = contents.peek() {
                         if next_char.is_alphanumeric() || next_char == '_' {
                             identifier.push(next_char);
-                            contents.next();
+                            self.contents_next(contents);
                         } else {
                             break;
                         }
@@ -280,7 +327,7 @@ impl Lexer {
                     while let Some(&next_char) = contents.peek() {
                         if next_char.is_digit(10) || next_char == '.' {
                             number.push(next_char);
-                            contents.next();
+                            self.contents_next(contents);
                         } else {
                             break;
                         }
@@ -289,7 +336,7 @@ impl Lexer {
                     Ok(Token::dynamic_tokenkind(
                         self.source_file.to_string(),
                         TokenKind::Number,
-                        number.parse().unwrap(),
+                        number,
                         self.position.0,
                         self.position.1,
                     ))
@@ -303,4 +350,11 @@ impl Lexer {
         }
     }
 
+
+    fn contents_next<I>(&mut self, contents: &mut Peekable<I>) -> Option<char>
+    where I: Iterator<Item = char>
+    {
+        self.position.1 += 1;
+        contents.next()
+    }
 }

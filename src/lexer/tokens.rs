@@ -1,8 +1,8 @@
-use std::{clone, collections::HashMap};
+use std::collections::HashMap;
 
 use super::value::Value;
 
-#[derive(Clone)] // DONT USE IT AAA
+#[derive(Clone, PartialEq, Debug)] // DONT USE IT AAA
 pub enum TokenKind {
     // Symbols
     LeftParen, RightParen, LeftBrace, RightBrace,
@@ -30,6 +30,7 @@ pub enum TokenKind {
     EOF
 }
 
+#[derive(Debug)]
 pub struct Token {
     kind: TokenKind,
     lexeme: String, // could be &str but lifetimes lmao
@@ -37,12 +38,29 @@ pub struct Token {
     line_number: usize,
     column_number: usize,
     end_offset: usize, // offset to the end of the token
-    parent_context: Option<String>,
+    parent_context: Option<String>, // for now a String
     typed_token: Option<TypedToken>,
     is_mutable: bool,
     access_specifier: Option<AccessSpecifier>,
     annotations: Option<Vec<String>>,
     source_file: Option<String>,
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+            && self.lexeme == other.lexeme
+            && self.literal == other.literal
+            && self.line_number == other.line_number
+            && self.column_number == other.column_number
+            && self.end_offset == other.end_offset
+            && self.parent_context == other.parent_context
+            && self.typed_token == other.typed_token
+            && self.is_mutable == other.is_mutable
+            && self.access_specifier == other.access_specifier
+            && self.annotations == other.annotations
+            && self.source_file == other.source_file
+    }
 }
 
 impl Token {
@@ -56,7 +74,7 @@ impl Token {
     ) -> Self {
         Self {
             kind,
-            lexeme,
+            lexeme: lexeme.to_string(),
             literal: None,
             line_number,
             column_number,
@@ -77,8 +95,8 @@ impl Token {
         column_number: usize,
     ) -> Self {
         Self {
-            lexeme: Self::read_lexeme(&kind).to_string(), // it uses a clone here!
-            kind, // it was "kind" and then "lexeme" but it consumed the variable
+            lexeme: Self::read_lexeme(&kind).to_string(),
+            kind,
             literal: None,
             line_number,
             column_number,
@@ -104,8 +122,8 @@ impl Token {
             TokenKind::Identifier => {
                 // Handle identifiers
                 Some(Self {
-                    lexeme: lexeme.clone(),
                     kind,
+                    lexeme: lexeme.to_string(),
                     literal: None, // Identifiers usually don't have a literal value.
                     line_number,
                     column_number,
@@ -120,9 +138,9 @@ impl Token {
             },
             TokenKind::String => {
                 Some(Self {
-                    lexeme: lexeme.clone(),
+                    lexeme: lexeme.to_string(),
                     kind,
-                    literal: Some(Value::String(lexeme.clone())),
+                    literal: Some(Value::String(lexeme.to_string())), // maybe it modifies so thats why its String
                     line_number,
                     column_number,
                     end_offset: column_number + lexeme.len(),
@@ -139,7 +157,7 @@ impl Token {
                 let num = lexeme.parse::<f64>().unwrap();
 
                 Some(Self {
-                    lexeme: lexeme.clone(),
+                    lexeme: lexeme.to_string(),
                     kind,
                     literal: Some(Value::Number(num)),
                     line_number,
@@ -158,7 +176,7 @@ impl Token {
                 let bool = lexeme.parse::<bool>().unwrap();
 
                 Some(Self {
-                    lexeme: lexeme.clone(),
+                    lexeme: lexeme.to_string(),
                     kind,
                     literal: Some(Value::Boolean(bool)),
                     line_number,
@@ -174,7 +192,7 @@ impl Token {
             },
             TokenKind::Array => { // TODO
                 Some(Self {
-                    lexeme: lexeme.clone(),
+                    lexeme: lexeme.to_string(),
                     kind,
                     literal: Some(Value::Array(vec![])),
                     line_number,
@@ -190,7 +208,7 @@ impl Token {
             },
             TokenKind::Object => { // TODO
                 Some(Self {
-                    lexeme: lexeme.clone(),
+                    lexeme: lexeme.to_string(),
                     kind,
                     literal: Some(Value::Object(HashMap::new())),
                     line_number,
@@ -215,7 +233,7 @@ impl Token {
     ) -> Self {
         Self {
             kind: TokenKind::EOF,
-            lexeme: String::from("End of File"),
+            lexeme: "End of File".to_string(),
             literal: None,
             line_number,
             column_number,
@@ -287,6 +305,7 @@ impl Token {
 
 
 //TODO
+#[derive(Debug, PartialEq)]
 enum DataType {
     Number,
     String,
@@ -302,11 +321,13 @@ enum DataType {
 }
 
 //TODO
+#[derive(Debug, PartialEq)]
 pub struct TypedToken {
     data_type: DataType, // Type of the token
     value: Option<Value>, // Value of the token, if any
 }
 //TODO
+#[derive(Debug, PartialEq)]
 enum AccessSpecifier {
     Public,
     Private
