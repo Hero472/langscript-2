@@ -1,8 +1,5 @@
 use std::{borrow::Borrow, collections::HashMap, iter::Peekable};
-
-use crate::lexer::utils::read_file;
-
-use super::tokens::{Token, TokenKind};
+use super::{tokens::{Token, TokenKind}, utils::StringStream};
 
 fn get_keywords_hashmap() -> HashMap<&'static str, TokenKind> {
     HashMap::from([
@@ -30,74 +27,64 @@ fn get_keywords_hashmap() -> HashMap<&'static str, TokenKind> {
 #[derive(Debug)]
 pub struct Lexer {
     source_filename: &'static str,
-    source_char: Vec<char>,
+    contents: StringStream,
+    source: String,
     tokens: Vec<Token>,
     keywords: HashMap<&'static str, TokenKind>,
-    position: (usize, usize),     // line, column
+    position: (usize, usize),     // line, column //TODO
+    current_position: usize
 }
 
 impl Lexer {
-    pub fn new(source_filename: &'static str, source_char: Vec<char>) -> Self {
+    pub fn new(source_filename: &'static str, source: String) -> Self {
         Lexer {
             source_filename,
-            source_char,
+            contents: StringStream::new(source.clone()), // clone!
+            source,
             tokens: vec![],
             keywords: get_keywords_hashmap(),
-            position: (1, 1)
+            position: (1, 1),
+            current_position: 0
         }
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<Token>, String> {
-
-        let mut contents = self.source_char
-            .clone() // This clone cost a lot, help
-            .into_iter()
-            .peekable();
-
-        let mut tokens= vec![];
+        let mut tokens = vec![];
         let mut errors = vec![];
-        while let Some(_) = contents.peek() {
-            let token_result: Result<Option<Token>, String> = self.scan_token(&mut contents);
-            println!("token_result: {:?}", token_result);
+        while let Some(_) = self.contents.peek() {
+            let token_result = self.scan_token();
             match token_result {
                 Ok(Some(token)) => {
                     tokens.push(token);
                 }
                 Ok(None) => {
-                    continue;
-                    // this is good behaviour I guess (just and only if it is well implemented)
+                    continue; // No token found, just continue
                 }
                 Err(err) => {
                     errors.push(err);
                 }
             }
         }
-
+    
+        // Add EOF token to the tokens vector
         tokens.push(Token::eof(
             String::from(self.source_filename),
             self.position.0,
-            self.position.1 + 1
+            self.position.1 + 1,
         ));
-
-        // this could be more rusty
-        if errors.len() > 0 {
-            let mut joined = String::new();
-            for msg in &errors {
-                joined.push_str(msg);
-                joined.push_str("\n");
-            }
-            return Err(joined)
+    
+        // If there were errors, collect them and return as a single error string
+        if !errors.is_empty() {
+            let joined = errors.join("\n");
+            return Err(joined);
         }
-
+    
         Ok(tokens)
     }
     
-    fn scan_token<I>(&mut self, contents: &mut Peekable<I>) -> Result<Option<Token>, String>
-    where
-        I: Iterator<Item = char>
-    {
+    fn scan_token(&mut self) -> Result<Option<Token>, String> {
         
-        if let Some(char) = self.contents_next(contents) {
+        if let Some(char) = self.contents_next() {
 
             match char {
                 // Handle single-character static_tokenkinds
@@ -176,38 +163,42 @@ impl Lexer {
 
                 // Handle potential multi-line and one-line comments
                 '/' => {
-                    if contents.peek() == Some(&'*') {
+                    if self.contents.peek() == Some(&'*') {
                         // Multi-line comment: /* */
-                        self.contents_next(contents); // Consume `*`
+                        self.contents_next(); // Consume `*`
 
-                        while let Some(&c) = contents.peek() {
-                            if c == '*' {
-                                self.contents_next(contents);
+                        while let Some(&c) = self.contents.peek() {
+                            if c == '*' && self.contents.peek_next() == Some(&'/') {
 
-                                if contents.peek() == Some(&'/') {
-                                    self.contents_next(contents); // Consume `>`
-                                    break; // End of multi-line comment
-                                }
+                                self.contents_next(); // Consumes `*`
+                                self.contents_next(); // Consumes `/`
+                                self.position.1 -= 1; // WHAT
+                                break;
+
                             } else if c == '\n' {
-                                self.position.0 += 1; // New line
-                                self.position.1 = 1;   // Reset column position
+                                self.position.0 += 1;
+                                self.position.1 = 1;
+                                self.contents.next();
+
+                            } else {
+                                self.contents_next();
                             }
                         }
 
                         Ok(None) // Return `None` because this is a comment
-                    } else if contents.peek() == Some(&'/') {
+                    } else if self.contents.peek() == Some(&'/') {
                         // One-line comment: `//`
-                        self.contents_next(contents); // Consume the first `/`
+                        self.contents_next(); // Consume the first `/`
 
                         // Consume characters until the end of the line
-                        while let Some(&c) = contents.peek() {
+                        while let Some(&c) = self.contents.peek() {
                             if c == '\n' {
-                                self.contents_next(contents); // Consume the newline
+                                self.contents_next(); // Consume the newline
                                 self.position.0 += 1; // New line
                                 self.position.1 = 1;  // Reset column position
                                 break;
                             } else {
-                                self.contents_next(contents); // Consume the current character
+                                self.contents_next(); // Consume the current character
                             }
                         }
 
@@ -225,8 +216,8 @@ impl Lexer {
     
                 // Handle potential multi-character tokens (e.g., `==`, `!=`)
                 '!' => {
-                    if contents.peek() == Some(&'=') {
-                        self.contents_next(contents); // Consume `=`
+                    if self.contents.peek() == Some(&'=') {
+                        self.contents_next(); // Consume `=`
                         Token::static_tokenkind(
                             self.source_filename.to_string(),
                             TokenKind::BangEqual,
@@ -243,8 +234,8 @@ impl Lexer {
                     }
                 }
                 '=' => {
-                    if contents.peek() == Some(&'=') {
-                        self.contents_next(contents); // Consume `=`
+                    if self.contents.peek() == Some(&'=') {
+                        self.contents_next(); // Consume `=`
                         Token::static_tokenkind(
                             self.source_filename.to_string(),
                             TokenKind::EqualEqual,
@@ -262,8 +253,8 @@ impl Lexer {
                 }
 
                 '>' => {
-                    if contents.peek() == Some(&'=') {
-                        self.contents_next(contents); // consume `=`
+                    if self.contents.peek() == Some(&'=') {
+                        self.contents_next(); // consume `=`
                         Token::static_tokenkind(
                             self.source_filename.to_string(),
                             TokenKind::GreaterEqual,
@@ -281,8 +272,8 @@ impl Lexer {
                 },
 
                 '<' => {
-                    if contents.peek() == Some(&'=') {
-                        self.contents_next(contents); // consume `=`
+                    if self.contents.peek() == Some(&'=') {
+                        self.contents_next(); // consume `=`
                         Token::static_tokenkind(
                             self.source_filename.to_string(),
                             TokenKind::LessEqual,
@@ -324,10 +315,10 @@ impl Lexer {
                     let mut identifier = String::new();
                     identifier.push(c);
     
-                    while let Some(&next_char) = contents.peek() {
+                    while let Some(&next_char) = self.contents.peek() {
                         if next_char.is_alphanumeric() || next_char == '_' {
                             identifier.push(next_char);
-                            self.contents_next(contents);
+                            self.contents_next();
                         } else {
                             break;
                         }
@@ -356,10 +347,10 @@ impl Lexer {
                     let mut number = String::new();
                     number.push(c);
     
-                    while let Some(&next_char) = contents.peek() {
+                    while let Some(&next_char) = self.contents.peek() {
                         if next_char.is_digit(10) || next_char == '.' {
                             number.push(next_char);
-                            self.contents_next(contents);
+                            self.contents_next();
                         } else {
                             break;
                         }
@@ -382,13 +373,11 @@ impl Lexer {
         }
     }
 
-
-    fn contents_next<I>(&mut self, contents: &mut Peekable<I>) -> Option<char>
-    where I: Iterator<Item = char>
-    {
+    fn contents_next(&mut self) -> Option<char> {
         self.position.1 += 1;
-        contents.next()
+        self.contents.next()
     }
+
 }
 
 #[cfg(test)]
@@ -398,22 +387,21 @@ mod tests {
 
     #[test]
     fn contents_next() {
-        let mut source = "some source".chars().into_iter().peekable();
-        let source_copy = "some source".chars().into_iter().collect::<Vec<char>>();
-        let mut lexer = Lexer::new("filename", source_copy);
+        let source = "some source".to_string();
+        let mut lexer = Lexer::new("filename", source);
 
-        lexer.contents_next(&mut source);
+        lexer.contents_next();
 
-        assert_eq!(lexer.position, (1, 2))
+        assert_eq!(lexer.position, (1, 2));
+        assert_eq!(lexer.contents.peek(), Some(&'o'))
     }
 
     #[test]
     fn scan_let() {
-        let mut source = "let".chars().into_iter().peekable();
-        let source_vec = "let".chars().into_iter().collect::<Vec<char>>();
+        let source_vec = "let".to_string();
         let mut lexer = Lexer::new("filename", source_vec);
 
-        let result = lexer.scan_token(&mut source).unwrap();
+        let result = lexer.scan_token().unwrap();
 
 
 
@@ -422,18 +410,16 @@ mod tests {
 
     #[test]
     fn scan_identifier() {
-        let mut source = "x".chars().into_iter().peekable();
-        let source_copy = "x";
-        let mut lexer = Lexer::new(source_copy, vec!['x']);
+        let mut lexer = Lexer::new("filename", "x".to_string());
 
-        let result = lexer.scan_token(&mut source).unwrap();
+        let result = lexer.scan_token().unwrap();
 
-        assert_eq!(result, Some(Token::dynamic_tokenkind(source_copy.to_string(), TokenKind::Identifier, "x".to_string(), 1, 2).unwrap()))
+        assert_eq!(result, Some(Token::dynamic_tokenkind("filename".to_string(), TokenKind::Identifier, "x".to_string(), 1, 2).unwrap()))
     }
 
     #[test]
     fn scan_parenthtesis_braces() {
-        let source = "(){}".chars().into_iter().collect::<Vec<char>>();
+        let source = "(){}".to_string();
         let mut lexer = Lexer::new("filename", source);
 
         let tokens = lexer.tokenize().unwrap();
@@ -451,7 +437,7 @@ mod tests {
 
     #[test]
     fn scan_symbols_and_operators() {
-        let source = ",.-+;*/?:".chars().into_iter().collect::<Vec<char>>();
+        let source = ",.-+;*/?:".to_string();
         let mut lexer = Lexer::new("filename", source);
 
         let tokens = lexer.tokenize().unwrap();
@@ -474,7 +460,7 @@ mod tests {
 
     #[test]
     fn valid_one_line_comment() {
-        let source = "// valid comment".chars().into_iter().collect::<Vec<char>>();
+        let source = "// valid comment".to_string();
         let mut lexer = Lexer::new("filename", source);
 
         let tokens = lexer.tokenize().unwrap();
@@ -486,17 +472,99 @@ mod tests {
         assert_eq!(tokens, token_test);
     }
 
-    // #[test]
-    // fn valid_multi_line_comment() {
-    //     let source = "/* valid multi line\ncomment*/".chars().into_iter().collect::<Vec<char>>();
-    //     let mut lexer = Lexer::new("filename", source);
+    #[test]
+    fn valid_empty_multi_line_comment() {
+        let source = "/**/".to_string();
+        let mut lexer = Lexer::new("filename", source);
+        let tokens = lexer.tokenize().unwrap();
 
+        let token_test = vec![
+            Token::eof("filename".to_string(), 1, 5)
+        ];
+
+        assert_eq!(tokens, token_test);
+        assert_eq!(lexer.contents.peek(), None);
+    }
+
+    #[test]
+    fn valid_multi_line_comment_one_line() {
+        let source = "/* hi */".to_string();
+        let mut lexer = Lexer::new("filename", source);
+        let tokens = lexer.tokenize().unwrap();
+
+        let token_test = vec![
+            Token::eof("filename".to_string(), 1, 9)
+        ];
+
+        assert_eq!(tokens, token_test);
+        assert_eq!(lexer.contents.peek(), None);
+    }
+
+    #[test]
+    fn valid_empty_multi_line_comment_one_line() {
+        let source = "/*\n*/".to_string();
+        let mut lexer = Lexer::new("filename", source);
+        let tokens = lexer.tokenize().unwrap();
+
+        let token_test = vec![
+            Token::eof("filename".to_string(), 2, 3)
+        ];
+
+        assert_eq!(tokens, token_test);
+        assert_eq!(lexer.contents.peek(), None);
+    }
+
+    // #[test]
+    // fn operators_one_char() {
+    //     let source = "> < ! =".to_string();
+    //     let mut lexer = Lexer::new("filename", source);
     //     let tokens = lexer.tokenize().unwrap();
 
     //     let token_test = vec![
-    //         Token::eof("filename".to_string(), 2, 9)
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::Greater, 1, 2).unwrap(),
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::Less, 1, 4).unwrap(),
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::Bang, 1, 6).unwrap(),
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::Equal, 1, 8).unwrap(),
+    //         Token::eof("filename".to_string(), 1, 9)
     //     ];
 
     //     assert_eq!(tokens, token_test);
+    //     assert_eq!(lexer.contents.peek(), None);
     // }
+
+    // #[test]
+    // fn operators_two_char() {
+    //     let source = ">= <= != ==".to_string();
+    //     let mut lexer = Lexer::new("filename", source);
+    //     let tokens = lexer.tokenize().unwrap();
+
+    //     let token_test = vec![
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::GreaterEqual, 1, 3).unwrap(),
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::LessEqual, 1, 6).unwrap(),
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::BangEqual, 1, 9).unwrap(),
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::EqualEqual, 1, 12).unwrap(),
+    //         Token::eof("filename".to_string(), 1, 13)
+    //     ];
+
+    //     assert_eq!(tokens, token_test);
+    //     assert_eq!(lexer.contents.peek(), None);
+    // }
+
+    // #[test]
+    // fn operators_two_char_other_order() {
+    //     let source = "<= >= != ==".to_string();
+    //     let mut lexer = Lexer::new("filename", source);
+    //     let tokens = lexer.tokenize().unwrap();
+
+    //     let token_test = vec![
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::LessEqual, 1, 3).unwrap(),
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::GreaterEqual, 1, 6).unwrap(),
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::BangEqual, 1, 9).unwrap(),
+    //         Token::static_tokenkind("filename".to_string(), TokenKind::EqualEqual, 1, 12).unwrap(),
+    //         Token::eof("filename".to_string(), 1, 13)
+    //     ];
+
+    //     assert_eq!(tokens, token_test);
+    //     assert_eq!(lexer.contents.peek(), None);
+    //}
 }

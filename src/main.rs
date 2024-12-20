@@ -1,7 +1,5 @@
 use std::env;
 
-use lexer::lexer::Lexer;
-
 mod lexer;
 
 fn main() {
