@@ -29,11 +29,15 @@ pub struct Lexer {
     source_filename: &'static str,
     contents: StringStream,
     source: String,
-    tokens: Vec<Token>,
     keywords: HashMap<&'static str, TokenKind>,
     position: (usize, usize),     // line, column //TODO
     current_position: usize
 }
+
+/*
+    position needs to be done right, because it doesnt arrange well the position, all of that is for error displaying on console
+    must be done, position must have the last index of the character
+*/
 
 impl Lexer {
     pub fn new(source_filename: &'static str, source: String) -> Self {
@@ -41,7 +45,6 @@ impl Lexer {
             source_filename,
             contents: StringStream::new(source.clone()), // clone!
             source,
-            tokens: vec![],
             keywords: get_keywords_hashmap(),
             position: (1, 1),
             current_position: 0

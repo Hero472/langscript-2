@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::value::Value;
+use crate::ast::value::Value;
 
 #[derive(Clone, PartialEq, Debug)] // DONT USE IT AAA
 pub enum TokenKind {
@@ -32,18 +32,17 @@ pub enum TokenKind {
 
 #[derive(Debug)]
 pub struct Token {
-    kind: TokenKind,
-    lexeme: String, // could be &str but lifetimes lmao
-    literal: Option<Value>,
-    line_number: usize,
-    column_number: usize,
-    end_offset: usize, // offset to the end of the token
-    parent_context: Option<String>, // for now a String
-    typed_token: Option<TypedToken>,
-    is_mutable: bool,
-    access_specifier: Option<AccessSpecifier>,
-    annotations: Option<Vec<String>>,
-    source_file: Option<String>,
+    pub(crate) kind: TokenKind,
+    pub(crate) lexeme: String, // could be &str but lifetimes lmao
+    pub(crate) literal: Option<Value>,
+    pub(crate) line_number: usize,
+    pub(crate) column_number: usize,
+    pub(crate) parent_context: Option<String>, // for now a String
+    pub(crate) typed_token: Option<TypedToken>,
+    pub(crate) is_mutable: bool,
+    pub(crate) access_specifier: Option<AccessSpecifier>,
+    pub(crate) annotations: Option<Vec<String>>,
+    pub(crate) source_file: Option<String>,
 }
 
 impl PartialEq for Token {
@@ -53,7 +52,6 @@ impl PartialEq for Token {
             && self.literal == other.literal
             && self.line_number == other.line_number
             && self.column_number == other.column_number
-            && self.end_offset == other.end_offset
             && self.parent_context == other.parent_context
             && self.typed_token == other.typed_token
             && self.is_mutable == other.is_mutable
@@ -78,7 +76,6 @@ impl Token {
             literal: None,
             line_number,
             column_number,
-            end_offset,
             parent_context: None,
             typed_token: None,
             is_mutable: false,
@@ -105,7 +102,6 @@ impl Token {
                 literal: None,
                 line_number,
                 column_number,
-                end_offset: column_number + 1,
                 parent_context: None,
                 typed_token: None,
                 is_mutable: false,
@@ -123,7 +119,6 @@ impl Token {
                     literal: None,
                     line_number,
                     column_number,
-                    end_offset: column_number + 1,
                     parent_context: None,
                     typed_token: None,
                     is_mutable: false,
@@ -143,7 +138,6 @@ impl Token {
                 literal: None,
                 line_number,
                 column_number,
-                end_offset: column_number + 1,
                 parent_context: None,
                 typed_token: None,
                 is_mutable: false,
@@ -159,7 +153,6 @@ impl Token {
                 literal: None,
                 line_number,
                 column_number,
-                end_offset: column_number + 1,
                 parent_context: None,
                 typed_token: None,
                 is_mutable: false,
@@ -193,7 +186,6 @@ impl Token {
                     literal: None, // Identifiers usually don't have a literal value.
                     line_number,
                     column_number,
-                    end_offset: column_number + lexeme.len(),
                     parent_context: None,
                     typed_token: None,
                     is_mutable: false,
@@ -209,7 +201,6 @@ impl Token {
                     literal: Some(Value::String(lexeme.to_string())), // maybe it modifies so thats why its String
                     line_number,
                     column_number,
-                    end_offset: column_number + lexeme.len(),
                     parent_context: None,
                     typed_token: None,
                     is_mutable: false,
@@ -228,7 +219,6 @@ impl Token {
                     literal: Some(Value::Number(num)),
                     line_number,
                     column_number,
-                    end_offset: column_number + lexeme.len(),
                     parent_context: None,
                     typed_token: None,
                     is_mutable: false,
@@ -247,7 +237,6 @@ impl Token {
                     literal: Some(Value::Boolean(bool)),
                     line_number,
                     column_number,
-                    end_offset: column_number + lexeme.len(),
                     parent_context: None,
                     typed_token: None,
                     is_mutable: false,
@@ -263,7 +252,6 @@ impl Token {
                     literal: Some(Value::Array(vec![])),
                     line_number,
                     column_number,
-                    end_offset: column_number + lexeme.len(),
                     parent_context: None,
                     typed_token: None,
                     is_mutable: false,
@@ -279,7 +267,6 @@ impl Token {
                     literal: Some(Value::Object(HashMap::new())),
                     line_number,
                     column_number,
-                    end_offset: column_number + lexeme.len(),
                     parent_context: None,
                     typed_token: None,
                     is_mutable: false,
@@ -303,7 +290,6 @@ impl Token {
             literal: None,
             line_number,
             column_number,
-            end_offset: column_number + 1,
             parent_context: None,
             typed_token: None,
             is_mutable: false,
@@ -367,6 +353,7 @@ impl Token {
 
         }
     }
+
 }
 
 //TODO
@@ -393,7 +380,7 @@ pub struct TypedToken {
 }
 //TODO
 #[derive(Debug, PartialEq)]
-enum AccessSpecifier {
+pub enum AccessSpecifier {
     Public,
     Private
 }
@@ -416,7 +403,6 @@ mod tests {
         assert_eq!(token.lexeme, "example");
         assert_eq!(token.line_number, 1);
         assert_eq!(token.column_number, 5);
-        assert_eq!(token.end_offset, 12);
         assert_eq!(token.source_file, Some("test.rs".to_string()));
     }
 
@@ -434,7 +420,6 @@ mod tests {
         assert_eq!(token.lexeme, "(");
         assert_eq!(token.line_number, 2);
         assert_eq!(token.column_number, 10);
-        assert_eq!(token.end_offset, 11);
     }
 
     #[test]
@@ -452,7 +437,6 @@ mod tests {
         assert_eq!(token.lexeme, "my_var");
         assert_eq!(token.line_number, 3);
         assert_eq!(token.column_number, 15);
-        assert_eq!(token.end_offset, 21);
     }
 
     #[test]

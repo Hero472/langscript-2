@@ -1,6 +1,7 @@
 use std::env;
 
 mod lexer;
+mod ast;
 
 fn main() {
     
