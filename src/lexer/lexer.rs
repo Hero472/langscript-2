@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::HashMap, iter::Peekable};
+use std::{borrow::Borrow, collections::HashMap};
 use super::{tokens::{Token, TokenKind}, utils::StringStream};
 
 fn get_keywords_hashmap() -> HashMap<&'static str, TokenKind> {
@@ -8,18 +8,20 @@ fn get_keywords_hashmap() -> HashMap<&'static str, TokenKind> {
         ("else", TokenKind::Else),
         ("false", TokenKind::False),
         ("true", TokenKind::True),
-        ("fun", TokenKind::Fn),
+        ("fn", TokenKind::Fn),
         ("for", TokenKind::For),
         ("if", TokenKind::If),
         ("null", TokenKind::Null),
         ("or", TokenKind::Or),
-        ("print", TokenKind::Print),
         ("return", TokenKind::Return),
         ("super", TokenKind::Super),
-        ("this", TokenKind::This),
+        ("self", TokenKind::This),
         ("let", TokenKind::Let),
         ("while", TokenKind::While),
+        ("enum", TokenKind::Enum),
+        ("match", TokenKind::Match),
         ("break", TokenKind::Break),
+        ("is", TokenKind::Is), // to check type
         ("continue", TokenKind::Continue)
     ])
 }

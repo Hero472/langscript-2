@@ -21,7 +21,7 @@ pub enum TokenKind {
     // Keywords
     And, Class, Else, False, True, Fn, For,
     If, Null, Or, Print, Return, Super, This,
-    Let, While, Enum,
+    Let, While, Enum, Match, Is, Mut,
 
     // Flow Control
     Break, Continue,
@@ -30,7 +30,7 @@ pub enum TokenKind {
     EOF
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub(crate) kind: TokenKind,
     pub(crate) lexeme: String, // could be &str but lifetimes lmao
@@ -131,8 +131,9 @@ impl Token {
             // Keywords
             TokenKind::And | TokenKind::Class | TokenKind::Else | TokenKind::False | TokenKind::True
             | TokenKind::Fn | TokenKind::For | TokenKind::If | TokenKind::Null | TokenKind::Or
-            | TokenKind::Print | TokenKind::Return | TokenKind::Super | TokenKind::This
-            | TokenKind::Let | TokenKind::While | TokenKind::Enum => Ok(Self {
+            | TokenKind::Return | TokenKind::Super | TokenKind::This
+            | TokenKind::Let | TokenKind::While | TokenKind::Enum | TokenKind::Match 
+            | TokenKind::Is | TokenKind::Mut => Ok(Self {
                 lexeme: Self::read_lexeme(&kind).to_string(),
                 kind,
                 literal: None,
@@ -344,6 +345,9 @@ impl Token {
             TokenKind::Let => "let",
             TokenKind::While => "while",
             TokenKind::Enum => "enum",
+            TokenKind::Match => "match",
+            TokenKind::Is => "is",
+            TokenKind::Mut => "mut",
 
             // Flow Control
             TokenKind::Break => "break",
@@ -357,7 +361,7 @@ impl Token {
 }
 
 //TODO
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum DataType {
     Number,
     String,
@@ -373,13 +377,13 @@ enum DataType {
 }
 
 //TODO
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypedToken {
     data_type: DataType, // Type of the token
     value: Option<Value>, // Value of the token, if any
 }
 //TODO
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AccessSpecifier {
     Public,
     Private
@@ -407,7 +411,7 @@ mod tests {
     }
 
     #[test]
-    fn test_token_static_tokenkind() {
+    fn test_token_static_tokenkind_left_paren() {
         let token = Token::static_tokenkind(
             "test.rs".to_string(),
             TokenKind::LeftParen,
@@ -418,6 +422,38 @@ mod tests {
 
         assert_eq!(token.kind, TokenKind::LeftParen);
         assert_eq!(token.lexeme, "(");
+        assert_eq!(token.line_number, 2);
+        assert_eq!(token.column_number, 10);
+    }
+
+    #[test]
+    fn test_token_static_tokenkind_for() {
+        let token = Token::static_tokenkind(
+            "test.rs".to_string(),
+            TokenKind::For,
+            2,
+            10,
+        );
+        let token = token.unwrap(); // Unwrap the token only once
+
+        assert_eq!(token.kind, TokenKind::For);
+        assert_eq!(token.lexeme, "for");
+        assert_eq!(token.line_number, 2);
+        assert_eq!(token.column_number, 10);
+    }
+
+    #[test]
+    fn test_token_static_tokenkind_match() {
+        let token = Token::static_tokenkind(
+            "test.rs".to_string(),
+            TokenKind::Match,
+            2,
+            10,
+        );
+        let token = token.unwrap(); // Unwrap the token only once
+
+        assert_eq!(token.kind, TokenKind::Match);
+        assert_eq!(token.lexeme, "match");
         assert_eq!(token.line_number, 2);
         assert_eq!(token.column_number, 10);
     }
@@ -482,6 +518,52 @@ mod tests {
         assert_eq!(token.lexeme, "End of File");
         assert_eq!(token.line_number, 6);
         assert_eq!(token.column_number, 30);
+    }
+
+    #[test]
+    fn test_keywords() {
+        // Define the source file and mock position data
+        let source_file = "test_source.rs".to_string();
+        let line_number = 1;
+        let column_number = 1;
+
+        // Map of keywords and their corresponding TokenKind
+        let keyword_map = vec![
+            ("and", TokenKind::And),
+            ("class", TokenKind::Class),
+            ("else", TokenKind::Else),
+            ("false", TokenKind::False),
+            ("true", TokenKind::True),
+            ("Fn", TokenKind::Fn),
+            ("for", TokenKind::For),
+            ("if", TokenKind::If),
+            ("null", TokenKind::Null),
+            ("or", TokenKind::Or),
+            ("return", TokenKind::Return),
+            ("super", TokenKind::Super),
+            ("this", TokenKind::This),
+            ("let", TokenKind::Let),
+            ("while", TokenKind::While),
+            ("enum", TokenKind::Enum),
+            ("match", TokenKind::Match),
+            ("is", TokenKind::Is),
+            ("mut", TokenKind::Mut),
+            ("break", TokenKind::Break),
+            ("continue", TokenKind::Continue),
+        ];
+
+        // Iterate through the keyword map
+        for (lexeme, kind) in keyword_map {
+            // Attempt to create the token
+            let kind_clone = kind.clone();
+            match Token::static_tokenkind(source_file.clone(), kind, line_number, column_number) {
+                Ok(token) => {
+                    // Assert that the lexeme matches the expected one
+                    assert_eq!(token.lexeme, lexeme, "{:?}", kind_clone);
+                }
+                Err(err) => panic!("Failed to create token for {:?}: {}", kind_clone, err),
+            }
+        }
     }
 
     #[test]
