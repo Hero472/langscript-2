@@ -1,8 +1,8 @@
 use std::vec;
 
-use crate::{ast::expr::Expr, lexer::tokens::{Token, TokenKind}, stmt::stmt::Stmt};
+use crate::{ast::{expr::Expr, value::Value}, lexer::tokens::{Token, TokenKind}, stmt::stmt::Stmt};
 
-use super::utils::{match_token, TokenStream};
+use super::utils::{match_token, match_tokens, TokenStream};
 
 pub struct Parser {
     pub(crate) tokens: TokenStream,
@@ -59,21 +59,123 @@ impl Parser {
         }
     }
 
-    fn primary() -> Result<Expr, String> {
-        todo!()
+    fn primary(&mut self) -> Result<Expr, String> {
+        let token = self.tokens.peek();
+        let result;
+
+        match &token.clone().unwrap().kind {
+            TokenKind::LeftParen => {
+                self.tokens.next();
+                let expr = self.expression()?;
+                self.tokens.consume(TokenKind::RightParen,
+                    format!(
+                        "Expected ')' in line {} column {}",
+                        self.tokens.peek().unwrap().line_number,
+                        self.tokens.peek().unwrap().column_number
+                    ).as_str()
+                );
+                result = Expr::Grouping { expression: Box::new(expr) }
+            },
+            TokenKind::False | TokenKind::True | TokenKind::Number | TokenKind::String => {
+                self.tokens.next(); // why the fuck
+                result = Expr::Literal { value: Value::from_token(token.unwrap().clone()) }
+            },
+            TokenKind::Identifier => {
+                todo!() // for variables
+            },
+            TokenKind::Fn => {
+                todo!() //anonymous functions
+            },
+            ttype => return Err(format!("Expected expression, last token read was {:?} in line {} column {}",
+                ttype, 
+                token.unwrap().line_number,
+                token.unwrap().column_number
+            ))
+        }
+        Ok(result)
     }
 
     fn statement(&mut self) -> Result<Stmt, String> {
-        todo!()
+        if match_token(self, &TokenKind::LeftBrace) {
+            self.block_statement()
+        } else {
+            self.expression_stmt()
+        }
+    }
+
+    fn expression_stmt(&mut self) -> Result<Stmt,String> {
+        let expression = self.expression()?;
+
+        self.tokens.consume(TokenKind::Semicolon, 
+            format!("Expected ';' after block statement in line {} column {}",
+            self.tokens.peek().unwrap().line_number,
+            self.tokens.peek().unwrap().column_number
+        ).as_str()
+        )?;
+
+        Ok(Stmt::Expression { expression })
     }
 
     fn expression(&mut self) -> Result<Expr,String> {
-        //self.assignment()
-        todo!()
+        self.unary()
     }
 
     fn unary(&mut self) -> Result<Expr, String> {
-        todo!()
+        
+        if match_tokens(self, &[TokenKind::Bang, TokenKind::Minus]) {
+            let operator = self.tokens.previous().unwrap();
+            let right = self.unary()?;
+
+            Ok(Expr::Unary { operator, right: Box::new(right) })
+        } else {
+            self.call()
+        }
+
+    }
+
+    fn call(&mut self) -> Result<Expr, String> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if match_token(self, &TokenKind::LeftParen) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break
+            }
+        }
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, String> {
+        let mut arguments = vec![];
+
+        if !self.check(TokenKind::RightParen) {
+            loop {
+                let arg = self.expression()?;
+                arguments.push(arg);
+
+                if arguments.len() >= 255 {
+                    let location = self.tokens.peek().unwrap().line_number;
+                    return Err(format!("Function cant have more than 255 arguments, in line {}", location))
+                }
+
+                if !match_token(self, &TokenKind::Comma) {
+                    break;
+                }
+            }
+        }
+
+        let paren = self.tokens.consume(TokenKind::RightParen,
+            format!("Expected ')' after arguments in line {} column {}",
+            self.tokens.peek().unwrap().line_number,
+            self.tokens.peek().unwrap().column_number
+        ).as_str())?;
+
+        Ok(Expr::Call {
+            callee: Box::new(callee),
+            paren,
+            arguments,
+        })
     }
 
     fn function_declaration(&mut self, fn_kind: &FunctionKind) -> Result<Stmt, String> {
@@ -91,7 +193,7 @@ impl Parser {
                 self.tokens.peek().unwrap().line_number,
                 self.tokens.peek().unwrap().column_number
             ).as_str()
-        );
+        )?;
 
         let mut params = vec![];
 
@@ -132,6 +234,10 @@ impl Parser {
             params,
             body 
         })
+    }
+
+    fn function_expression(&mut self) {
+        
     }
 
     fn check(&mut self, typ: TokenKind) -> bool {

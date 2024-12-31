@@ -1,14 +1,67 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt, rc::Rc};
 
 use crate::lexer::tokens::{Token, TokenKind};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone)]
 pub enum Value {
     Number(f64),
     String(String),
     Boolean(bool),
     Array(Vec<Value>),
-    Object(HashMap<String, Value>)
+    Object(HashMap<String, Value>),
+    Callable {
+        name: String,
+        arity: usize,
+        fun: Rc<dyn Fn(&Vec<Value>) -> Value> // this should add the environment for that
+    }
+}
+
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Number(n) => write!(f, "Number({})", n),
+            Value::String(s) => write!(f, "String(\"{}\")", s),
+            Value::Boolean(b) => write!(f, "Boolean({})", b),
+            Value::Array(arr) => {
+                write!(f, "Array([")?;
+                for (i, value) in arr.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{:?}", value)?;
+                }
+                write!(f, "])")
+            }
+            Value::Object(obj) => {
+                write!(f, "Object({{")?;
+                for (i, (key, value)) in obj.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "\"{}\": {:?}", key, value)?;
+                }
+                write!(f, "}})")
+            }
+            Value::Callable { name, arity, .. } => write!(f, "Callable(name: {}, arity: {})", name, arity),
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Boolean(a), Value::Boolean(b)) => a == b,
+            (Value::Array(a), Value::Array(b)) => a == b,
+            (Value::Object(a), Value::Object(b)) => a == b,
+            (
+                Value::Callable { name: a_name, arity: a_arity, .. },
+                Value::Callable { name: b_name, arity: b_arity, .. },
+            ) => a_name == b_name && a_arity == b_arity,
+            _ => false,
+        }
+    }
 }
 
 impl Value {
@@ -108,6 +161,77 @@ impl Value {
             )),
         }
     }
+
+    pub fn from_token(token: Token) -> Self {
+        match token.kind {
+            TokenKind::Number => {
+                if let Some(Value::Number(number)) = token.literal {
+                    Self::Number(number)
+                } else {
+                    panic!(
+                        "Expected a Number literal, but got {:?} in line {} column {}",
+                        token.literal, token.line_number, token.column_number
+                    );
+                }
+            }
+            TokenKind::String => {
+                if let Some(Value::String(string)) = token.literal {
+                    Self::String(string)
+                } else {
+                    panic!(
+                        "Expected a String literal, but got {:?} in line {} column {}",
+                        token.literal, token.line_number, token.column_number
+                    );
+                }
+            }
+            TokenKind::True => Self::Boolean(true),
+            TokenKind::False => Self::Boolean(false),
+            _ => panic!(
+                "Could not create Value from {:?} in line {} column {}",
+                token.lexeme, token.line_number, token.column_number
+            ),
+        }
+    }
+    pub fn as_number(&self) -> Option<f64> {
+        if let Value::Number(n) = self {
+            Some(*n)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_string(&self) -> Option<&String> {
+        if let Value::String(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_boolean(&self) -> Option<bool> {
+        if let Value::Boolean(b) = self {
+            Some(*b)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_array(&self) -> Option<&Vec<Value>> {
+        if let Value::Array(a) = self {
+            Some(a)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_object(&self) -> Option<&HashMap<String, Value>> {
+        if let Value::Object(o) = self {
+            Some(o)
+        } else {
+            None
+        }
+    }
+
 }
 
 #[cfg(test)]

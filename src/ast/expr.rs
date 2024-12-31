@@ -17,6 +17,11 @@ pub enum Expr {
     Unary {
         operator: Token,
         right: Box<Expr>
+    },
+    Call {
+        callee: Box<Expr>,
+        paren: Token,
+        arguments: Vec<Expr>
     }
 }
 
@@ -34,6 +39,37 @@ impl Expr {
             Expr::Unary { operator, right } => {
                 let right_value = right.evaluate()?;
                 right_value.apply_unary_op(operator)
+            },
+            Expr::Call { callee, paren, arguments } => {
+                let callable = (*callee).evaluate()?;
+
+                match callable {
+                    Value::Callable { 
+                        name,
+                        arity,
+                        fun 
+                    } => {
+
+                        if arguments.len() != arity {
+                            return Err(format!(
+                                "Callable {} expected {} arguments but got {}",
+                                name,
+                                arity,
+                                arguments.len()
+                            ));
+                        }
+
+                        let mut arguments_values = vec![];
+
+                        for arg in arguments {
+                            let val = arg.evaluate()?;
+                            arguments_values.push(val);
+                        }
+
+                        Ok(fun(&arguments_values))
+                    },
+                    other => Err("is not callable".to_string())
+                }
             },
         }
     }
